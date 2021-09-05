@@ -22,9 +22,9 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
-            SmartDevice(title: 'stekkerdoos', ip: '192.168.2.17'),
-            SmartDevice(title: 'lamp schuur', ip: '192.168.2.17'),
-            SmartDevice(title: 'lamp woonkamer', ip: '192.168.2.17'),
+            SmartDevice(title: 'stekkerdoos', ip: "192.168.2.17"),
+            //SmartDevice(title: 'lamp schuur', ip: "192.168.2.17"),
+            //SmartDevice(title: 'lamp woonkamer', ip: "192.168.2.17"),
           ],
         ),
       ),

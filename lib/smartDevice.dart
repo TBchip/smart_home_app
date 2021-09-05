@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 class SmartDevice extends StatefulWidget {
@@ -13,15 +17,56 @@ class SmartDevice extends StatefulWidget {
 }
 
 class _SmartDeviceState extends State<SmartDevice> {
-  bool _state = true;
+  String _switch = "off";
+  String _startup = "on";
 
-  _onStateChange() {
+  int btnOn = 800;
+  int btnOff = 200;
+
+  bool _isExpanded = false;
+
+  _setSwitch() {
     setState(() {
-      _state = !_state;
+      _switch = _switch == "on" ? "off" : "on";
+    });
+    http.get(Uri.parse(
+        'https://thijsbischoff.nl/smarthome/${widget.ip}/setstate/$_switch'));
+  }
+
+  _setStartup(String value) {
+    setState(() {
+      _startup = value;
+    });
+    http.get(Uri.parse(
+        'https://thijsbischoff.nl/smarthome/${widget.ip}/setStartup/$_startup'));
+  }
+
+  _getInfo() async {
+    final res = await http
+        .get(Uri.parse('https://thijsbischoff.nl/smarthome/${widget.ip}/info'));
+
+    Map<String, dynamic> jsonData = jsonDecode(res.body);
+    setState(() {
+      _switch = jsonData["data"]["switch"];
+      _startup = jsonData["data"]["startup"];
     });
   }
 
-  _getInfo() {}
+  _setIsExpanded() {
+    setState(() {
+      _isExpanded = !_isExpanded;
+    });
+  }
+
+  Timer? timer;
+  @override
+  void initState() {
+    super.initState();
+
+    _getInfo();
+    const PERIOD = const Duration(seconds: 3);
+    new Timer.periodic(PERIOD, (Timer t) => {_getInfo()});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,19 +80,124 @@ class _SmartDeviceState extends State<SmartDevice> {
         borderRadius: BorderRadius.all(Radius.circular(20)),
       ),
       alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          Text(
-            widget.title,
-            style: TextStyle(
-              fontSize: 20,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                height: 50.0,
+                width: 50.0,
+                child: FittedBox(
+                  child: FloatingActionButton(
+                    onPressed: _setSwitch,
+                    child:
+                        Icon(_switch == "on" ? Icons.power : Icons.power_off),
+                    backgroundColor: _switch == "on"
+                        ? Colors.blue[btnOn]
+                        : Colors.blue[btnOff],
+                    tooltip: "turn on/off",
+                  ),
+                ),
+              ),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 22,
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.edit),
+                tooltip: "edit settings",
+                onPressed: _setIsExpanded,
+              ),
+            ],
           ),
-          FloatingActionButton(
-            onPressed: _onStateChange,
-            child: Icon(_state ? Icons.lightbulb : Icons.lightbulb_outline),
-            backgroundColor: Colors.blue,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: _isExpanded ? 150 : 0,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Column(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.fromLTRB(0, 25, 0, 20),
+                        child: Text(
+                          "Startup state:",
+                          style: TextStyle(
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Container(
+                            height: 50.0,
+                            width: 50.0,
+                            child: FittedBox(
+                              child: FloatingActionButton(
+                                onPressed: () => {_setStartup("on")},
+                                child: Text(
+                                  "On",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                backgroundColor: _startup == "on"
+                                    ? Colors.blue[btnOn]
+                                    : Colors.blue[btnOff],
+                              ),
+                            ),
+                          ),
+                          Container(
+                            height: 50.0,
+                            width: 50.0,
+                            child: FittedBox(
+                              child: FloatingActionButton(
+                                onPressed: () => {_setStartup("stay")},
+                                child: Text(
+                                  "Stay",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                backgroundColor: _startup == "stay"
+                                    ? Colors.blue[btnOn]
+                                    : Colors.blue[btnOff],
+                              ),
+                            ),
+                          ),
+                          Container(
+                            height: 50.0,
+                            width: 50.0,
+                            child: FittedBox(
+                              child: FloatingActionButton(
+                                onPressed: () => {_setStartup("off")},
+                                child: Text(
+                                  "Off",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                backgroundColor: _startup == "off"
+                                    ? Colors.blue[btnOn]
+                                    : Colors.blue[btnOff],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           )
         ],
       ),
