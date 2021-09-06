@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'smartDevice.dart';
+import 'package:smart_home_app/smartDevice/serverManaged/smartDeviceServerManagedPage.dart';
+import 'package:smart_home_app/smartDevice/standalone/smartDeviceStandalonePage.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({Key? key, required this.title}) : super(key: key);
@@ -12,128 +16,126 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  var _devices = [];
+  int _adminModeCounter = 0;
+  bool _adminMode = false;
 
-  _refreshDevices() async {
-    final prefs = await SharedPreferences.getInstance();
+  bool _serverManaged = false;
+  List<bool> _adminModeSelections = List.generate(1, (_) => false);
 
-    final devices = prefs.getStringList('devices') ?? [];
-
-    var deviceConfig = [];
-    for (var device in devices) {
-      deviceConfig.add([device, prefs.getString(device)]);
-    }
-
+  _increaseAdminModeCounter() {
     setState(() {
-      _devices = deviceConfig;
+      _adminModeCounter = min(20, _adminModeCounter + 1);
     });
   }
 
-  _addDeviceDialog() {
-    final nameController = TextEditingController();
-    final ipController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Apparaat toevoegen"),
-          content: Container(
-            height: 120,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Apparaatnaam:',
-                  ),
-                ),
-                TextField(
-                  controller: ipController,
-                  decoration: InputDecoration(
-                    labelText: 'Ip:',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            new TextButton(
-              child: new Text("Annuleer"),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            new TextButton(
-              child: new Text("Toevoegen"),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _addDevice(nameController.text, ipController.text);
-              },
-            ),
-          ],
-        );
-      },
-    );
+  _decreaseAdminModeCounter() {
+    setState(() {
+      _adminModeCounter = max(0, _adminModeCounter - 1);
+    });
   }
 
-  _addDevice(String deviceName, String deviceIp) async {
+  _updateAdminMode() {
+    _increaseAdminModeCounter();
+    if (_adminModeCounter == 20) {
+      setState(() {
+        _adminMode = true;
+      });
+    }
+  }
+
+  _confirmModeSelection() async {
+    setState(() {
+      _adminMode = false;
+      _adminModeCounter = 0;
+      _serverManaged = _adminModeSelections[0];
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('serverManaged', _serverManaged);
+  }
+
+  _loadServerManaged() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final devices = prefs.getStringList('devices') ?? [];
-    devices.add(deviceName);
-    prefs.setStringList('devices', devices);
-
-    prefs.setString(deviceName, deviceIp);
-
-    _refreshDevices();
+    var target = prefs.getBool('serverManaged');
+    setState(() {
+      _serverManaged = target == null ? false : target;
+    });
   }
 
+  Timer? adminModeUpdateTimer;
   @override
   void initState() {
     super.initState();
 
-    _refreshDevices();
+    _loadServerManaged();
+
+    const PERIOD = const Duration(seconds: 1);
+    adminModeUpdateTimer =
+        new Timer.periodic(PERIOD, (Timer t) => {_decreaseAdminModeCounter()});
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+
+    adminModeUpdateTimer!.cancel();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Colors.blue,
-      ),
-      body: SingleChildScrollView(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: <Widget>[
-              for (var device in _devices)
-                SmartDevice(
-                    title: device[0],
-                    ip: device[1],
-                    refreshDevices: _refreshDevices),
-              if (_devices.length == 0)
-                Container(
-                  margin: EdgeInsets.fromLTRB(50, 200, 50, 0),
-                  child: Text(
-                    "Geen apparaten, voeg er een toe met de knop rechtonder in je scherm",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-            ],
+        title: TextButton(
+          onPressed: _updateAdminMode,
+          child: Text(
+            widget.title,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+            ),
+            softWrap: false,
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addDeviceDialog,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
         backgroundColor: Colors.blue,
+        actions: [
+          _adminMode
+              ? Container(
+                  margin: EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      ToggleButtons(
+                        borderRadius: BorderRadius.circular(20),
+                        fillColor: Colors.blue[700],
+                        color: Colors.black,
+                        selectedColor: Colors.black,
+                        isSelected: _adminModeSelections,
+                        children: [
+                          Icon(Icons.groups),
+                        ],
+                        onPressed: (int index) {
+                          setState(() {
+                            _adminModeSelections[index] =
+                                !_adminModeSelections[index];
+                          });
+                        },
+                      ),
+                      TextButton(
+                        onPressed: _confirmModeSelection,
+                        child: Icon(
+                          Icons.check,
+                          color: Colors.black,
+                        ),
+                      )
+                    ],
+                  ),
+                )
+              : Container(),
+        ],
       ),
+      body: _serverManaged
+          ? SmartDeviceServerManagedPage()
+          : SmartDeviceStandalonePage(),
     );
   }
 }

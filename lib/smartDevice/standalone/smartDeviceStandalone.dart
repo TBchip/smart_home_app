@@ -5,23 +5,28 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-class SmartDevice extends StatefulWidget {
-  SmartDevice(
-      {Key? key,
-      required this.title,
-      required this.ip,
-      required this.refreshDevices})
-      : super(key: key);
+class SmartDeviceStandalone extends StatefulWidget {
+  SmartDeviceStandalone({
+    Key? key,
+    required this.title,
+    required this.ip,
+    required this.refreshDevices,
+  }) : super(key: key);
 
   final String title;
   final String ip;
   final Function() refreshDevices;
 
+  bool isonline = false;
+
+  final _SmartDeviceStandaloneState smartDeviceStandaloneState =
+      new _SmartDeviceStandaloneState();
+
   @override
-  _SmartDeviceState createState() => _SmartDeviceState();
+  _SmartDeviceStandaloneState createState() => smartDeviceStandaloneState;
 }
 
-class _SmartDeviceState extends State<SmartDevice> {
+class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
   String _switch = "off";
   String _startup = "on";
   bool _isOnline = false;
@@ -37,8 +42,19 @@ class _SmartDeviceState extends State<SmartDevice> {
     setState(() {
       _switch = _switch == "on" ? "off" : "on";
     });
-    http.get(Uri.parse(
-        'https://thijsbischoff.nl/smarthome/${widget.ip}/setstate/$_switch'));
+
+    var body = jsonEncode({
+      "deviceid": "",
+      "data": {
+        "switch": _switch,
+      }
+    });
+    http.post(
+      Uri.parse("http://${widget.ip}:8081/zeroconf/switch"),
+      body: body,
+    );
+    //http.get(Uri.parse(
+    //    'https://thijsbischoff.nl/smarthome/${widget.ip}/setstate/$_switch'));
   }
 
   _setStartup(String value) {
@@ -47,38 +63,62 @@ class _SmartDeviceState extends State<SmartDevice> {
     setState(() {
       _startup = value;
     });
-    http.get(Uri.parse(
-        'https://thijsbischoff.nl/smarthome/${widget.ip}/setStartup/$_startup'));
+
+    var body = jsonEncode({
+      "deviceid": "",
+      "data": {
+        "startup": _startup,
+      }
+    });
+    http.post(
+      Uri.parse("http://${widget.ip}:8081/zeroconf/startup"),
+      body: body,
+    );
+    //http.get(Uri.parse(
+    //    'https://thijsbischoff.nl/smarthome/${widget.ip}/setStartup/$_startup'));
   }
 
   _getInfo() async {
     final res;
     try {
+      var body = jsonEncode({
+        "deviceid": "",
+        "data": {},
+      });
       res = await http
-          .get(
-              Uri.parse('https://thijsbischoff.nl/smarthome/${widget.ip}/info'))
+          .post(
+            Uri.parse("http://${widget.ip}:8081/zeroconf/info"),
+            body: body,
+          )
           .timeout(const Duration(seconds: 5));
+      //res = await http
+      //    .get(
+      //        Uri.parse('https://thijsbischoff.nl/smarthome/${widget.ip}/info'))
+      //    .timeout(const Duration(seconds: 5));
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _isOnline = false;
       });
+      widget.isonline = false;
       return;
     }
 
+    if (!mounted) return;
     Map<String, dynamic> jsonData = jsonDecode(res.body);
     if (jsonData["data"] == null) {
       setState(() {
         _isOnline = false;
       });
+      widget.isonline = false;
       return;
     }
-    if (!mounted) return;
     setState(() {
       _switch = jsonData["data"]["switch"];
       _startup = jsonData["data"]["startup"];
       _isOnline = true;
     });
+    widget.isonline = true;
   }
 
   _setIsExpanded() {
@@ -118,30 +158,31 @@ class _SmartDeviceState extends State<SmartDevice> {
   _deleteDevice() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final devices = prefs.getStringList('devices') ?? [];
+    final devices = prefs.getStringList('standaloneDevices') ?? [];
     devices.remove(widget.title);
-    prefs.setStringList('devices', devices);
+    prefs.setStringList('standaloneDevices', devices);
 
     prefs.remove(widget.title);
 
     widget.refreshDevices();
   }
 
-  Timer? timer;
+  Timer? smartDeviceUpdateTimer;
   @override
   void initState() {
     super.initState();
 
     _getInfo();
     const PERIOD = const Duration(seconds: 3);
-    timer = new Timer.periodic(PERIOD, (Timer t) => {_getInfo()});
+    smartDeviceUpdateTimer =
+        new Timer.periodic(PERIOD, (Timer t) => {_getInfo()});
   }
 
   @override
   void dispose() {
     super.dispose();
 
-    timer!.cancel();
+    smartDeviceUpdateTimer!.cancel();
   }
 
   @override
@@ -161,9 +202,9 @@ class _SmartDeviceState extends State<SmartDevice> {
           _isOnline
               ? Container()
               : Container(
-                  margin: EdgeInsets.fromLTRB(15, 0, 0, 10),
+                  margin: EdgeInsets.fromLTRB(15, 0, 0, 16),
                   child: Text(
-                    "offline",
+                    "Kan geen verbinding maken...",
                     style: TextStyle(
                       fontStyle: FontStyle.italic,
                       fontSize: 19,
