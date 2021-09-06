@@ -129,7 +129,7 @@ class _SmartDeviceStandalonePageState extends State<SmartDeviceStandalonePage> {
                 Container(
                   margin: EdgeInsets.fromLTRB(50, 200, 50, 0),
                   child: Text(
-                    "Geen apparaten, voeg er een toe met de knop rechtonder in je scherm",
+                    "Geen apparaten, voeg er een toe met de knop bovenin je scherm!",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 20,
