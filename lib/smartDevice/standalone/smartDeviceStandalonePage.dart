@@ -3,7 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'smartDeviceStandalone.dart';
 
 class SmartDeviceStandalonePage extends StatefulWidget {
-  SmartDeviceStandalonePage({Key? key}) : super(key: key);
+  SmartDeviceStandalonePage({
+    Key? key,
+    required this.isAdminModeEnabled,
+  }) : super(key: key);
+
+  final Function() isAdminModeEnabled;
 
   final _SmartDeviceStandalonePageState smartDeviceStandaloneListState =
       new _SmartDeviceStandalonePageState();
@@ -109,27 +114,35 @@ class _SmartDeviceStandalonePageState extends State<SmartDeviceStandalonePage> {
     return SingleChildScrollView(
       child: Center(
         child: Container(
-          margin: EdgeInsets.fromLTRB(0, 30, 0, 30),
+          margin: EdgeInsets.fromLTRB(
+            0,
+            (widget.isAdminModeEnabled() ? 30 : 0),
+            0,
+            30,
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
-              FloatingActionButton(
-                onPressed: _addDeviceDialog,
-                tooltip: 'Apparaat toevoegen',
-                child: Icon(Icons.add),
-                backgroundColor: Colors.blue,
-              ),
+              widget.isAdminModeEnabled()
+                  ? FloatingActionButton(
+                      onPressed: _addDeviceDialog,
+                      tooltip: 'Apparaat toevoegen',
+                      child: Icon(Icons.add),
+                      backgroundColor: Colors.blue,
+                    )
+                  : Container(),
               for (var device in _devices)
                 SmartDeviceStandalone(
                   title: device[0],
                   ip: device[1],
                   refreshDevices: _refreshDevices,
+                  isAdminModeEnabled: widget.isAdminModeEnabled,
                 ),
               if (_devices.length == 0)
                 Container(
                   margin: EdgeInsets.fromLTRB(50, 200, 50, 0),
                   child: Text(
-                    "Geen apparaten, voeg er een toe met de knop bovenin je scherm!",
+                    "Geen apparaten toegevoegd",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 20,

@@ -63,6 +63,10 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  _isAdminModeEnabled() {
+    return _adminMode;
+  }
+
   Timer? adminModeUpdateTimer;
   @override
   void initState() {
@@ -135,7 +139,9 @@ class _HomePageState extends State<HomePage> {
       ),
       body: _serverManaged
           ? SmartDeviceServerManagedPage()
-          : SmartDeviceStandalonePage(),
+          : SmartDeviceStandalonePage(
+              isAdminModeEnabled: _isAdminModeEnabled,
+            ),
     );
   }
 }

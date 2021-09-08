@@ -11,11 +11,13 @@ class SmartDeviceStandalone extends StatefulWidget {
     required this.title,
     required this.ip,
     required this.refreshDevices,
+    required this.isAdminModeEnabled,
   }) : super(key: key);
 
   final String title;
   final String ip;
   final Function() refreshDevices;
+  final Function() isAdminModeEnabled;
 
   bool isonline = false;
 
@@ -27,6 +29,9 @@ class SmartDeviceStandalone extends StatefulWidget {
 }
 
 class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
+  String _title = "";
+  String _ip = "";
+
   String _switch = "off";
   String _startup = "on";
   bool _isOnline = false;
@@ -35,6 +40,9 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
   int btnOff = 200;
 
   bool _isExpanded = false;
+
+  final nameController = TextEditingController();
+  final ipController = TextEditingController();
 
   _setSwitch() {
     if (!_isOnline) return;
@@ -50,11 +58,11 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
       }
     });
     http.post(
-      Uri.parse("http://${widget.ip}:8081/zeroconf/switch"),
+      Uri.parse("http://$_ip:8081/zeroconf/switch"),
       body: body,
     );
     //http.get(Uri.parse(
-    //    'https://thijsbischoff.nl/smarthome/${widget.ip}/setstate/$_switch'));
+    //    'https://thijsbischoff.nl/smarthome/$_ip/setstate/$_switch'));
   }
 
   _setStartup(String value) {
@@ -71,11 +79,11 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
       }
     });
     http.post(
-      Uri.parse("http://${widget.ip}:8081/zeroconf/startup"),
+      Uri.parse("http://$_ip:8081/zeroconf/startup"),
       body: body,
     );
     //http.get(Uri.parse(
-    //    'https://thijsbischoff.nl/smarthome/${widget.ip}/setStartup/$_startup'));
+    //    'https://thijsbischoff.nl/smarthome/$_ip/setStartup/$_startup'));
   }
 
   _getInfo() async {
@@ -87,13 +95,13 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
       });
       res = await http
           .post(
-            Uri.parse("http://${widget.ip}:8081/zeroconf/info"),
+            Uri.parse("http://$_ip:8081/zeroconf/info"),
             body: body,
           )
           .timeout(const Duration(seconds: 5));
       //res = await http
       //    .get(
-      //        Uri.parse('https://thijsbischoff.nl/smarthome/${widget.ip}/info'))
+      //        Uri.parse('https://thijsbischoff.nl/smarthome/$_ip/info'))
       //    .timeout(const Duration(seconds: 5));
     } catch (_) {
       if (!mounted) return;
@@ -133,8 +141,7 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: new Text("Verwijder Apparaat"),
-          content: new Text(
-              "Weet je zeker dat je '${widget.title}' wilt verwijderen"),
+          content: new Text("Weet je zeker dat je '$_title' wilt verwijderen"),
           actions: <Widget>[
             new TextButton(
               child: new Text("Annuleer"),
@@ -159,18 +166,58 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
     final prefs = await SharedPreferences.getInstance();
 
     final devices = prefs.getStringList('standaloneDevices') ?? [];
-    devices.remove(widget.title);
+    devices.remove(_title);
     prefs.setStringList('standaloneDevices', devices);
 
-    prefs.remove(widget.title);
+    prefs.remove(_title);
 
     widget.refreshDevices();
+  }
+
+  _onNameChange() async {
+    String oldName = _title;
+    String newName = nameController.text;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    final devices = prefs.getStringList('standaloneDevices') ?? [];
+    if (devices.contains(newName)) return;
+
+    setState(() {
+      _title = newName;
+    });
+
+    devices.remove(oldName);
+    devices.add(newName);
+    prefs.setStringList('standaloneDevices', devices);
+
+    prefs.remove(oldName);
+    prefs.setString(newName, _ip);
+  }
+
+  _onIpChange() async {
+    String newIp = ipController.text;
+
+    setState(() {
+      _ip = newIp;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setString(_title, newIp);
   }
 
   Timer? smartDeviceUpdateTimer;
   @override
   void initState() {
     super.initState();
+
+    setState(() {
+      _title = widget.title;
+      _ip = widget.ip;
+    });
+
+    nameController.text = _title;
+    ipController.text = _ip;
 
     _getInfo();
     const PERIOD = const Duration(seconds: 3);
@@ -233,7 +280,7 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
               ),
               Expanded(
                 child: Text(
-                  widget.title,
+                  _title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
@@ -244,12 +291,14 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
                 icon: Icon(Icons.edit),
                 tooltip: "bewerk instellingen",
                 onPressed: _setIsExpanded,
+                iconSize: 25,
               ),
             ],
           ),
           AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            height: _isExpanded ? 205 : 0,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+            height: _isExpanded ? (widget.isAdminModeEnabled() ? 360 : 110) : 0,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -257,95 +306,151 @@ class _SmartDeviceStandaloneState extends State<SmartDeviceStandalone> {
                   Column(
                     children: [
                       Container(
-                        padding: EdgeInsets.fromLTRB(0, 25, 0, 20),
-                        child: Text(
-                          "Opstart staat:",
-                          style: TextStyle(
-                            fontSize: 18,
-                          ),
+                        margin: EdgeInsets.fromLTRB(35, 15, 0, 0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Container(
+                                margin: EdgeInsets.fromLTRB(0, 0, 25, 8),
+                                child: TextField(
+                                  controller: nameController,
+                                  decoration: InputDecoration(
+                                    labelText: "naam:",
+                                  ),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _onNameChange,
+                              icon: Icon(Icons.check),
+                              iconSize: 25,
+                            ),
+                          ],
                         ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Container(
-                            height: 50.0,
-                            width: 50.0,
-                            child: FittedBox(
-                              child: FloatingActionButton(
-                                onPressed: () => {_setStartup("on")},
-                                child: Text(
-                                  "aan",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                      widget.isAdminModeEnabled()
+                          ? Container(
+                              margin: EdgeInsets.fromLTRB(35, 0, 0, 0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Flexible(
+                                    child: Container(
+                                      margin: EdgeInsets.fromLTRB(0, 0, 25, 8),
+                                      child: TextField(
+                                        controller: ipController,
+                                        decoration: InputDecoration(
+                                          labelText: "ip:",
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: _onIpChange,
+                                    icon: Icon(Icons.check),
+                                    iconSize: 25,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Container(),
+                      widget.isAdminModeEnabled()
+                          ? Container(
+                              padding: EdgeInsets.fromLTRB(0, 25, 0, 20),
+                              child: Text(
+                                "Opstart staat:",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                ),
+                              ),
+                            )
+                          : Container(),
+                      widget.isAdminModeEnabled()
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Container(
+                                  height: 50.0,
+                                  width: 50.0,
+                                  child: FittedBox(
+                                    child: FloatingActionButton(
+                                      onPressed: () => {_setStartup("on")},
+                                      child: Text(
+                                        "aan",
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      backgroundColor: _startup == "on"
+                                          ? Colors.blue[btnOn]
+                                          : Colors.blue[btnOff],
+                                      tooltip: "aan",
+                                    ),
                                   ),
                                 ),
-                                backgroundColor: _startup == "on"
-                                    ? Colors.blue[btnOn]
-                                    : Colors.blue[btnOff],
-                                tooltip: "aan",
-                              ),
-                            ),
-                          ),
-                          Container(
-                            height: 50.0,
-                            width: 50.0,
-                            child: FittedBox(
-                              child: FloatingActionButton(
-                                onPressed: () => {_setStartup("stay")},
-                                child: Text(
-                                  "behoud",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                Container(
+                                  height: 50.0,
+                                  width: 50.0,
+                                  child: FittedBox(
+                                    child: FloatingActionButton(
+                                      onPressed: () => {_setStartup("stay")},
+                                      child: Text(
+                                        "behoud",
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      backgroundColor: _startup == "stay"
+                                          ? Colors.blue[btnOn]
+                                          : Colors.blue[btnOff],
+                                      tooltip: "behoud",
+                                    ),
                                   ),
                                 ),
-                                backgroundColor: _startup == "stay"
-                                    ? Colors.blue[btnOn]
-                                    : Colors.blue[btnOff],
-                                tooltip: "behoud",
-                              ),
-                            ),
-                          ),
-                          Container(
-                            height: 50.0,
-                            width: 50.0,
-                            child: FittedBox(
-                              child: FloatingActionButton(
-                                onPressed: () => {_setStartup("off")},
-                                child: Text(
-                                  "uit",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                Container(
+                                  height: 50.0,
+                                  width: 50.0,
+                                  child: FittedBox(
+                                    child: FloatingActionButton(
+                                      onPressed: () => {_setStartup("off")},
+                                      child: Text(
+                                        "uit",
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      backgroundColor: _startup == "off"
+                                          ? Colors.blue[btnOn]
+                                          : Colors.blue[btnOff],
+                                      tooltip: "uit",
+                                    ),
                                   ),
                                 ),
-                                backgroundColor: _startup == "off"
-                                    ? Colors.blue[btnOn]
-                                    : Colors.blue[btnOff],
-                                tooltip: "uit",
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                              ],
+                            )
+                          : Container(),
                     ],
                   ),
-                  Container(
-                    margin: EdgeInsets.fromLTRB(0, 20, 0, 0),
-                    child: IconButton(
-                      iconSize: 40,
-                      color: Colors.red[700],
-                      onPressed: _deleteDeviceAreYouSure,
-                      icon: Icon(Icons.delete),
-                      tooltip: "verwijder apparaat",
-                    ),
-                  ),
+                  widget.isAdminModeEnabled()
+                      ? Container(
+                          margin: EdgeInsets.fromLTRB(0, 25, 0, 0),
+                          child: IconButton(
+                            iconSize: 40,
+                            color: Colors.red[700],
+                            onPressed: _deleteDeviceAreYouSure,
+                            icon: Icon(Icons.delete),
+                            tooltip: "verwijder apparaat",
+                          ),
+                        )
+                      : Container(),
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );
