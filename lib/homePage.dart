@@ -1,10 +1,10 @@
-import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smart_home_app/smartDevice/serverManaged/smartDeviceServerManagedPage.dart';
-import 'package:smart_home_app/smartDevice/standalone/smartDeviceStandalonePage.dart';
+import 'package:http/http.dart' as http;
+
+import 'package:smart_home_app/smartDevice/DevicesList.dart';
+import 'package:smart_home_app/schedule/ScheduleList.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({Key? key, required this.title}) : super(key: key);
@@ -16,132 +16,139 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _adminModeCounter = 0;
-  bool _adminMode = false;
+  Map<String, dynamic> _devices = {};
+  List<dynamic> _schedules = [];
 
-  bool _serverManaged = false;
-  List<bool> _adminModeSelections = List.generate(1, (_) => false);
+  var _serverUrl = '[2a02:a442:20ef:1:b8ed:6c1b:2e11:f8e9]:51310';
 
-  _increaseAdminModeCounter() {
-    setState(() {
-      _adminModeCounter = min(20, _adminModeCounter + 1);
-    });
-  }
+  var _loading = true;
 
-  _decreaseAdminModeCounter() {
-    setState(() {
-      _adminModeCounter = max(0, _adminModeCounter - 1);
-    });
-  }
+  int _pageIdx = 0;
 
-  _updateAdminMode() {
-    _increaseAdminModeCounter();
-    if (_adminModeCounter == 20) {
-      setState(() {
-        _adminMode = true;
-      });
-    }
-  }
-
-  _confirmModeSelection() async {
-    setState(() {
-      _adminMode = false;
-      _adminModeCounter = 0;
-      _serverManaged = _adminModeSelections[0];
-    });
-
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setBool('serverManaged', _serverManaged);
-  }
-
-  _loadServerManaged() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    var target = prefs.getBool('serverManaged');
-    setState(() {
-      _serverManaged = target == null ? false : target;
-    });
-  }
-
-  _isAdminModeEnabled() {
-    return _adminMode;
-  }
-
-  Timer? adminModeUpdateTimer;
   @override
   void initState() {
     super.initState();
 
-    _loadServerManaged();
-
-    const PERIOD = const Duration(seconds: 1);
-    adminModeUpdateTimer =
-        new Timer.periodic(PERIOD, (Timer t) => {_decreaseAdminModeCounter()});
+    _loading = true;
+    _refreshAll();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  _refreshAll() async {
+    await _refreshDevices();
+    await _refreshSchedules();
+    _loading = false;
+  }
 
-    adminModeUpdateTimer!.cancel();
+  _refreshDevices() async {
+    var response = await http.get(
+      Uri.http(_serverUrl, '/device/getall'),
+    );
+
+    setState(() {
+      _devices = jsonDecode(response.body);
+    });
+  }
+
+  _refreshSchedules() async {
+    var response = await http.get(
+      Uri.http(_serverUrl, '/schedule/getall'),
+    );
+
+    setState(() {
+      _schedules = jsonDecode(response.body);
+    });
+  }
+
+  Map<String, dynamic> _getDevices() {
+    return _devices;
+  }
+
+  List<dynamic> _getSchedules() {
+    return _schedules;
+  }
+
+  _setSchedules(dynamic schedules) {
+    setState(() {
+      _schedules = schedules;
+    });
+  }
+
+  String _getServerUrl() {
+    return _serverUrl;
+  }
+
+  _changePage(int newIdx) {
+    setState(() {
+      _pageIdx = newIdx;
+    });
+  }
+
+  Future<void> _refresh() async {
+    await _refreshAll();
+    return Future.delayed(Duration(seconds: 0));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: TextButton(
-          onPressed: _updateAdminMode,
-          child: Text(
-            widget.title,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-            ),
-            softWrap: false,
+        title: Text(
+          widget.title,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
           ),
+          softWrap: false,
         ),
         backgroundColor: Colors.blue,
-        actions: [
-          _adminMode
-              ? Container(
-                  margin: EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      ToggleButtons(
-                        borderRadius: BorderRadius.circular(20),
-                        fillColor: Colors.blue[700],
-                        color: Colors.black,
-                        selectedColor: Colors.black,
-                        isSelected: _adminModeSelections,
-                        children: [
-                          Icon(Icons.groups),
-                        ],
-                        onPressed: (int index) {
-                          setState(() {
-                            _adminModeSelections[index] =
-                                !_adminModeSelections[index];
-                          });
-                        },
-                      ),
-                      TextButton(
-                        onPressed: _confirmModeSelection,
-                        child: Icon(
-                          Icons.check,
-                          color: Colors.black,
-                        ),
-                      )
-                    ],
-                  ),
-                )
-              : Container(),
-        ],
       ),
-      body: _serverManaged
-          ? SmartDeviceServerManagedPage()
-          : SmartDeviceStandalonePage(
-              isAdminModeEnabled: _isAdminModeEnabled,
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          children: [
+            Center(
+              child: _loading
+                  ? Container(
+                      margin: EdgeInsets.only(top: 70),
+                      child: Text(
+                        'Laden...',
+                        style: TextStyle(
+                          fontSize: 18,
+                        ),
+                      ),
+                    )
+                  : <Widget>[
+                      DevicesList(
+                        getServerUrl: _getServerUrl,
+                        getDevices: _getDevices,
+                        getSchedules: _getSchedules,
+                        key: ObjectKey({_devices, _schedules}),
+                      ),
+                      ScheduleList(
+                        getServerUrl: _getServerUrl,
+                        getSchedules: _getSchedules,
+                        setSchedules: _setSchedules,
+                        key: ObjectKey({_schedules}),
+                      ),
+                    ].elementAt(_pageIdx),
             ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.device_hub),
+            label: 'Apparaten',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.access_time),
+            label: 'Schemas',
+          ),
+        ],
+        currentIndex: _pageIdx,
+        onTap: _changePage,
+      ),
     );
   }
 }
