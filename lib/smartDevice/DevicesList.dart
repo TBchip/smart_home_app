@@ -10,11 +10,13 @@ class DevicesList extends StatefulWidget {
     Key? key,
     required this.getServerUrl,
     required this.getDevices,
+    required this.setDevice,
     required this.getSchedules,
   }) : super(key: key);
 
   final String Function() getServerUrl;
   final Map<String, dynamic> Function() getDevices;
+  final Function(String, dynamic) setDevice;
   final List<dynamic> Function() getSchedules;
 
   @override
@@ -38,9 +40,7 @@ class _DevicesListState extends State<DevicesList> {
     );
 
     if (response.statusCode == 200) {
-      setState(() {
-        widget.getDevices()[mac] = jsonDecode(response.body);
-      });
+      widget.setDevice(mac, jsonDecode(response.body));
     }
   }
 
@@ -60,9 +60,7 @@ class _DevicesListState extends State<DevicesList> {
     );
 
     if (response.statusCode == 200) {
-      setState(() {
-        widget.getDevices()[mac] = jsonDecode(response.body);
-      });
+      widget.setDevice(mac, jsonDecode(response.body));
     }
   }
 
@@ -88,9 +86,9 @@ class _DevicesListState extends State<DevicesList> {
     );
 
     if (response.statusCode == 200) {
-      setState(() {
-        widget.getDevices()[mac]['schedule'] = response.body;
-      });
+      dynamic newDevice = widget.getDevices()[mac];
+      newDevice['schedule'] = response.body;
+      widget.setDevice(mac, newDevice);
     }
   }
 
