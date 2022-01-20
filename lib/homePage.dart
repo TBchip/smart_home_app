@@ -24,7 +24,7 @@ class _HomePageState extends State<HomePage> {
 
   Map<String, dynamic> _devices = {};
   List<dynamic> _schedules = [];
-//2a02:a442:20ef:1:6af7:128d:25e2:f885
+
   late String _serverIp = '';
   final serverIpController = TextEditingController();
 
